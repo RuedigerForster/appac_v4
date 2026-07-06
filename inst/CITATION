@@ -1,0 +1,35 @@
+citHeader("To cite the pressure-correction method that 'appac' implements, please cite the original works:")
+
+bibentry(
+  bibtype = "Article",
+  title   = "Effect of pressure on the performance of the flame ionization detector",
+  author  = c(person(given = "P.", family = "Boček"),
+              person(given = "J.", family = "Novák"),
+              person(given = "J.", family = "Janák")),
+  journal = "Journal of Chromatography A",
+  year    = "1969",
+  volume  = "43",
+  pages   = "431--436",
+  doi     = "10.1016/S0021-9673(00)99223-9"
+)
+
+bibentry(
+  bibtype = "Misc",
+  title   = "Pressure Compensation for a Chromatograph",
+  author  = c(person(given = "B. O.", family = "Ayers"),
+              person(given = "E. K.", family = "Clardy")),
+  year    = "1985",
+  note    = "US Patent 4,512,181",
+  url     = "https://patents.google.com/patent/US4512181A"
+)
+
+bibentry(
+  bibtype     = "TechReport",
+  title       = "The importance of area and retention time precision in gas chromatography",
+  author      = person(family = "Agilent Technologies"),
+  institution = "Agilent Technologies",
+  type        = "Technical Note",
+  number      = "5989-3425EN",
+  year        = "2005",
+  url         = "https://www.agilent.com/cs/library/technicaloverviews/public/5989-3425EN.pdf"
+)

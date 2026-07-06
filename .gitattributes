@@ -1,0 +1,10 @@
+# Normalise all text files to LF in the repository (and on checkout), so mixed
+# CRLF/LF editing can't produce phantom whole-file diffs again.  Binary data
+# files are marked explicitly so they are never line-ending-normalised.
+* text=auto eol=lf
+
+*.rda    binary
+*.RData  binary
+*.Rdata  binary
+*.rds    binary
+*.parquet binary

@@ -1,0 +1,252 @@
+---
+title: "APPAC: correcting GC peak areas for atmospheric pressure"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{APPAC: correcting GC peak areas for atmospheric pressure}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteDepends{ggplot2, patchwork}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.width = 8, fig.height = 5, dpi = 96,
+  message = FALSE, warning = FALSE
+)
+## the plotting functions need the suggested ggplot2 / patchwork; skip those
+## chunks gracefully if they are not installed.
+have_plots <- requireNamespace("ggplot2", quietly = TRUE) &&
+              requireNamespace("patchwork", quietly = TRUE)
+```
+
+**APPAC** (*Atmospheric Pressure Peak Area Correction*) corrects gas-chromatography
+peak areas for the influence of ambient **air pressure** on standard detectors open
+to the atmosphere — chiefly the flame-ionization detector (FID). This vignette first
+shows the everyday **usage** on the bundled `PLOT_FID` data, then explains the
+**method**: how a single common pressure sensitivity, per-cylinder drift and
+measurement noise are separated by a principal-component decomposition.
+
+# Usage
+
+APPAC ships the `PLOT_FID` example dataset — six control cylinders, five hydrocarbon
+peaks and roughly five years of real FID injections with expert-annotated peak
+integration. The plots use the suggested `ggplot2` / `patchwork`.
+
+```{r packages}
+library(appac)
+```
+
+## Load the data
+
+`PLOT_FID` is long-format (one row per injection × peak). `check_cols()` maps the raw
+column names to the canonical ones and cleans the sample/peak names. The reference
+pressure `P_ref` is the mid-range of the observed air pressure.
+
+```{r load}
+acn <- list(sample_col = "sample.name", peak_col = "peak.name",
+            date_col = "injection.date", pressure_col = "air.pressure",
+            area_col = "raw.area")
+data  <- check_cols(PLOT_FID, acn)
+ap    <- as.numeric(data[, "Air_Pressure"])
+P_ref <- mean(range(ap, na.rm = TRUE))
+cat(sprintf("%d injections, %d cylinders, %d peaks;  P_ref = %.1f hPa\n",
+            nrow(data) / length(unique(data$Peak_Name)),
+            length(unique(data$Sample_Name)),
+            length(unique(data$Peak_Name)), P_ref))
+```
+
+## Fit the correction
+
+Two passes: `appac()` estimates the common pressure sensitivity **kappa** and the
+drift model; `debias_ct()` then finds the centre that minimises the chi-square of the
+residuals (the bias–variance trade-off), and a second `appac()` runs with that
+de-biased centre. *(`npt = 7` keeps the vignette quick; production uses `npt = 21`.)*
+
+```{r fit}
+fit1 <- appac(data = data, P_ref = P_ref)
+ct   <- debias_ct(fit1, data = data, P_ref = P_ref, npt = 7, quiet = TRUE)
+fit  <- appac(data = data, ct = ct, P_ref = P_ref)
+cat(sprintf("kappa = %.3e  (per hPa)\n", unlist(fit@correction@coefficients)))
+```
+
+## Inspect the fit
+
+`plot_area_pressure_fit()` shows exactly what enters the kappa estimate: the
+reference-scaled correlated area for every (cylinder, peak), binned by pressure
+deviation. All series share the single common slope kappa.
+
+```{r kappa-fit, eval = have_plots}
+plot_area_pressure_fit(fit)
+```
+
+Raw areas scatter with the day-to-day pressure swings; the corrected areas collapse
+onto the reference. Detected episode breakpoints are marked.
+
+```{r area-date, eval = have_plots}
+plot_area_date(fit, sample = 1, peak = "n.C4H10", show_changepoints = TRUE)
+```
+
+## Run-to-run scatter and diagnostics
+
+The headline metric — relative standard deviation of the areas before and after
+correction (cylinder 1):
+
+```{r rsd}
+rsd <- function(x) sd(x) / mean(x) * 100
+raw <- fit@samples[[1]]$raw.area
+cor <- fit@samples[[1]]$corrected.area
+data.frame(peak              = colnames(raw),
+           RSD_raw_pct       = round(apply(raw, 2, rsd), 3),
+           RSD_corrected_pct = round(apply(cor, 2, rsd), 3))
+```
+
+Reduced chi-square ≈ 1 means the corrected areas are down to the short-term
+measurement-noise floor:
+
+```{r gof}
+goodness_of_fit(fit)[[1]]
+```
+
+`plot_residuals()` panels the residual diagnostics — a (leptokurtic, heavy-tailed)
+histogram with a fitted normal, the normal Q–Q, and residual vs. date / vs. pressure.
+Both scatter panels are flat, confirming the structured pressure and drift artifacts
+are gone and only the measurement noise remains.
+
+```{r residuals, fig.width = 10, fig.height = 8, eval = have_plots}
+plot_residuals(fit, sample = 1, peak = "n.C4H10")
+```
+
+A compact summary of the fitted object (`print()` adds the per-sample goodness of
+fit):
+
+```{r show}
+fit
+```
+
+# Method: the decomposition
+
+## The physical effect and the forward model
+
+Boček, Novák & Janák (1969) showed experimentally that the FID's ionization
+efficiency is strongly pressure-dependent: normal atmospheric swings already change
+the sensitivity by up to ±5 % relative to the value at a fixed pressure. In routine
+data this pressure signal is **masked by slow instrument drift**, so it must be
+*separated* from the drift before it can be corrected.
+
+APPAC models the raw area of peak \(j\) in cylinder \(i\) at injection \(t\) as a
+multiplicative combination of a reference area, a pressure factor, a slow
+drift / daily factor and noise:
+
+\[
+A_{ijt} \;=\; \mu_{ij}\,\bigl(1 + \kappa\,(P_t - P_\mathrm{ref})\bigr)\,
+              (1 + \delta_{it})\,(1 + \varepsilon_{ijt}),
+\]
+
+where \(\mu_{ij}\) is the per-cylinder, per-peak reference (centre), \(\kappa\) the
+**common** pressure sensitivity shared by all peaks and cylinders, \(P_t\) the ambient
+pressure, \(\delta_{it}\) a slow drift plus a daily factor, and
+\(\varepsilon_{ijt}\) heavy-tailed measurement noise.
+
+## Separating the components by PCA
+
+Per cylinder, each peak is standardised and a one-component principal-component
+analysis is run on the (dates × peaks) matrix. The components carry distinct physics:
+
+* **PC1 — correlated component:** the dominant common mode across peaks — the
+  pressure response together with the smooth drift.
+* **PC2 — uncorrelated component:** the second mode, carrying the per-cylinder bias
+  and *abrupt* level shifts (the change-point signal).
+* **PC3 and higher — noise:** the per-peak, injection-to-injection measurement noise.
+
+Because the noise is multiplicative — the per-peak standard deviation grows with the
+level, \(\mathrm{sd} \approx a\,\mu + b\,\mu^2\) — a large peak would otherwise
+dominate the PCA. Each peak is therefore referenced to its centre and
+**dispersion-normalised**: divided by its modelled dispersion so that every peak
+enters the PCA with comparable variance. This is the variance-stabilising
+(diagonal-scaling) half of a *whitening* transform; the PCA then supplies the
+decorrelation, so standardise-then-PCA together sphere the per-peak signals. The
+whitening is *across peaks* (amplitude), not *in time*: the injection-to-injection
+noise itself stays reddened (brown, AR(1)-like), as the `Synth_data` fixture
+deliberately illustrates.
+
+## Estimating the common kappa
+
+Kappa is estimated on a **drift-reduced** signal: a robust loess low-pass removes the
+slow drift on a *copy* of the areas, so \(\kappa\) is not confounded with the drift.
+The correlated component is then regressed on the pressure deviation with a
+heavy-tail-robust generalized linear model (`robustbase::glmrob`), which down-weights
+the tails instead of being dragged by them; the single common slope yields
+\(\kappa = 1/\sum_k \beta_k\). Robust regression is the appropriate tool here because
+the corrected-area distribution is markedly leptokurtic.
+
+## Drift and the daily factor (NA-tolerant imputation)
+
+The uncorrelated (PC2) daily factors are combined **across cylinders** to estimate the
+instrument-wide drift and bias. Because the cylinders are not all measured on the same
+days, the cross-cylinder daily-factor matrix has gaps. APPAC fills them by
+reconstruction rather than dropping incomplete days: a base-R NA-tolerant PCA
+(unit-variance scaling, gaps seeded at the mean, then an iterated rank-\(k\) SVD
+reconstruction — the svdImpute / EM scheme of probabilistic PCA; Tipping & Bishop
+1999; Roweis 1998; Dempster, Laird & Rubin 1977). The first two components give the
+common trend and per-cylinder bias; a parallel decomposition of the correlated part
+gives the common daily factor. The assembled multiplier (kappa pressure factor +
+drift + daily factor) is then divided out of the raw areas.
+
+## Refining the centre: chi-square minimisation
+
+The correction references each peak to a centre \(\mu_{ij}\); the whole-series mean is
+a convenient first estimate but a biased one — it is itself pulled by the residual
+structure the correction has not yet removed. `debias_ct()` refines it by
+**minimising the residual chi-square**. For a small grid of scale factors \(c\)
+around 1, it re-runs `appac()` with the centre scaled to \(c\,\mu_{ij}\) and records,
+per peak, the chi-square of the corrected-area residuals about that centre. That
+statistic is very nearly quadratic in \(c\), so its minimum is the closed-form
+parabola vertex
+
+\[
+\chi^2(c) \;\approx\; b_0 + b_1 c + b_2 c^2 \ (b_2 > 0),
+\qquad
+c^{*} \;=\; -\,\frac{b_1}{2\,b_2},
+\]
+
+with \(b_0, b_1, b_2\) fitted by ordinary least squares over the sweep. The de-biased
+centre \(c^{*}\mu_{ij}\) trades a little variance for reduced bias and is fed back
+into a second `appac()` pass. (The closed form replaces a root-find on the
+derivative, which failed whenever the optimum fell outside the sweep — precisely the
+large-bias case the refinement exists for.)
+
+## Change points: episode and precision breaks
+
+The PC2 drift signal carries **real structural breaks** — cylinder changes, detector
+maintenance, column trims. `get_changepoints()` detects these episode boundaries with
+a deterministic structural-break model (an OLS-MOSUM fluctuation test gating
+BIC-optimal breakpoint dating from **strucchange**; Zeileis et al. 2002). Its
+second-moment counterpart, `get_variance_changepoints()`, detects changes in
+measurement **precision** (variance) on the noise-energy signal — a distinct
+instrument event from a level shift.
+
+```{r changepoints}
+get_changepoints(fit@samples)            # episode level breakpoints
+```
+
+Because these breaks are what separates one calibration regime from the next, they are
+central to the correction rather than an afterthought — and, unlike the
+single-calibration-period pressure compensation of Ayers & Clardy (1985), let APPAC
+correct a multi-year record without per-period recalibration.
+
+# References
+
+* Boček P., Novák J., Janák J. (1969). Effect of pressure on the performance of the
+  flame ionization detector. *J. Chromatogr.* **43**, 431–436.
+  <doi:10.1016/S0021-9673(00)99223-9>
+* Ayers B. O., Clardy D. E. (1985). *Barometric pressure correction for a chromatograph.*
+  US Patent 4,512,181.
+* Tipping M. E., Bishop C. M. (1999). Probabilistic principal component analysis.
+  *J. R. Stat. Soc. B* **61**(3), 611–622.
+* Roweis S. (1998). EM algorithms for PCA and SPCA. *Adv. Neural Inf. Process. Syst.* **10**.
+* Dempster A. P., Laird N. M., Rubin D. B. (1977). Maximum likelihood from incomplete
+  data via the EM algorithm. *J. R. Stat. Soc. B* **39**(1), 1–38.
+* Zeileis A., Leisch F., Hornik K., Kleiber C. (2002). strucchange: An R package for
+  testing for structural change in linear regression models. *J. Stat. Softw.*
+  **7**(2). <doi:10.18637/jss.v007.i02>

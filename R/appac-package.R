@@ -1,0 +1,86 @@
+#' appac: Atmospheric Pressure Peak Area Correction for Gas Chromatography
+#' with Standard Detectors
+#'
+#' Corrects gas-chromatography peak areas for the influence of ambient air
+#' pressure on standard detectors open to the ambient atmosphere, such as the
+#' flame ionization detector (FID).  The entry point is
+#' \code{\link{appac}}; \code{\link{debias_ct}} refines the centres,
+#' \code{\link{goodness_of_fit}} reports the residual reduced chi-square,
+#' \code{\link{get_changepoints}} and \code{\link{get_variance_changepoints}}
+#' detect episode level and variance breakpoints, and the
+#' \code{plot_*} functions visualise the result.
+#'
+#' @section Limitations:
+#' \strong{Change-point detection.}
+#' \itemize{
+#'   \item \strong{The level detector only sees compositional breaks.}
+#'     \code{\link{get_changepoints}} reads the PC2 score.  A
+#'     composition-preserving (common-mode) level shift -- every peak moving by
+#'     the same factor -- is rank-1 and loads onto PC1, so it is invisible to
+#'     the PC2-based detector.  Only breaks that change the \emph{relative} peak
+#'     amounts are found.
+#'   \item \strong{Variance (precision) breaks are detectable only when large or
+#'     well sampled.}  Detecting a variance ratio \eqn{R} over a segment
+#'     requires \eqn{R} above the F-floor for the \emph{effective} sample size.
+#'     Variance detection cannot exploit the \eqn{\sqrt{N}} averaging that makes
+#'     level detection easy -- it is bounded by the variance estimate's own
+#'     sampling noise (\eqn{\propto \sqrt{2/n}}), and serially correlated
+#'     ("brown") noise shrinks the effective \eqn{n} further.  Small steps are,
+#'     correctly, not flagged.
+#'   \item \strong{Detection is significance-gated and needs enough data.}
+#'     Minimum series length and segment sizes apply; short series or fewer than
+#'     two usable peaks yield no detection.
+#' }
+#' \strong{Minimum data.}  \code{\link{appac}} requires at least \strong{3
+#' samples/cylinders} (to separate the common drift), at least \strong{2 peaks},
+#' at least \strong{20 injections per sample}, and non-constant areas;
+#' undersized or degenerate input is rejected with an explanatory error.
+#' \strong{Pressure-correction (kappa) fit.}
+#' \itemize{
+#'   \item
+#'   \strong{A whole-series fit is biased by unmodelled level breakpoints.}
+#'     The drift model fits a smooth trend and cannot absorb an abrupt level
+#'     \emph{step}; a mid-series step biases \code{kappa}.  Detect breakpoints
+#'     and analyse episodes separately rather than correcting across an
+#'     uncorrected boundary.
+#'   \item \strong{\code{kappa} is a single common coefficient} fitted across
+#'     all peaks and cylinders; genuinely peak- or detector-specific
+#'     sensitivities are not modelled.
+#'   \item \strong{Requires sufficient pressure variation.}  \code{kappa} is the
+#'     area-pressure slope, so near-constant ambient pressure leaves no signal,
+#'     and \code{P_ref} must lie within the observed pressure range.
+#'   \item \strong{Cannot reduce uncertainty below the repeatability floor.}
+#'     The correction removes the colored low-frequency drift but leaves the
+#'     irreducible short-term measurement noise.
+#' }
+#' \strong{Missing data.}
+#' \itemize{
+#'   \item \strong{NA is tolerated, with caveats.}  Up to 30\% NA per peak is
+#'     filled by low-rank imputation (peaks above that are dropped); whole
+#'     missing injections (staggered dates) are handled by cross-sample
+#'     reconstruction.  But imputation fabricates values, and heavy imputation
+#'     on adversarial data can destabilise \code{kappa}.
+#'   \item \strong{The grid must be complete}: every peak must be present as a
+#'     row for every injection (\code{nrow} a multiple of the peak count), even
+#'     where the value is NA.
+#' }
+#' \strong{Model assumptions.}
+#' \itemize{
+#'   \item \strong{Multiplicative (proportional) noise is assumed}: the
+#'     dispersion normalisation models the per-peak standard deviation as
+#'     proportional to the centre.  A peak dominated by additive/constant
+#'     background noise would be over-weighted; the method targets the
+#'     proportional-noise regime typical of the FID.
+#'   \item \strong{A-posteriori only}: appac corrects already-measured
+#'     areas.  It has no forecasting ability and makes no prediction beyond
+#'     the acquired data.
+#' }
+#'
+#' @keywords internal
+#' @importFrom data.table as.IDate
+#' @importFrom utils capture.output
+#' @importFrom tibble as_tibble
+#' @importFrom dplyr "%>%" group_by summarize summarise across where starts_with
+#' @import methods
+#' @import stats
+"_PACKAGE"
