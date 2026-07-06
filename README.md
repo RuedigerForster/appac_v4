@@ -110,4 +110,4 @@ vignette: `vignette("appac")`.
 
 ## License
 
-GPL-3. See [COPYING](COPYING).
+Released under GPL-3. See the [full license text](https://www.gnu.org/licenses/gpl-3.0.html).

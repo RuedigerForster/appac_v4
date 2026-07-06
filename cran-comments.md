@@ -27,6 +27,17 @@ flame-ionization detector).
 
   Expected for a first submission.
 
+  The same check reports possibly misspelled words in the Description:
+
+  ```
+  Bocek (11:15), Clardy (13:11), Janak (11:30), Novak (11:22),
+  Zeileis (20:56)
+  ```
+
+  These are all correctly-spelled author surnames of the cited references
+  (Boček, Novák and Janák 1969; Ayers and Clardy 1985; Zeileis and others
+  2002), given in ASCII form. Not misspellings.
+
   The same check flags one URL as possibly invalid:
 
   ```
