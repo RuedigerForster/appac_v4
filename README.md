@@ -18,8 +18,9 @@ decomposed by principal components into a pressure-correlated component and
 per-peak drift; a single common pressure-sensitivity coefficient **kappa** is
 estimated with a heavy-tail-robust fit on a drift-reduced signal, and the slow
 drift plus a daily factor are removed. It returns the corrected areas with a
-chi-square goodness-of-fit diagnostic, and provides Bayesian change-point
-detection (via RBeast) for episode and breakpoint analysis.
+chi-square goodness-of-fit diagnostic, and provides structural-break
+detection (via **strucchange**) for episode-level and variance breakpoint
+analysis.
 
 ## Scope — an *a posteriori* correction, not a prediction
 
