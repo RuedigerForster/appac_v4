@@ -130,7 +130,8 @@ fit
 
 Boček, Novák & Janák (1969) showed experimentally that the FID's ionization
 efficiency is strongly pressure-dependent: normal atmospheric swings already change
-the sensitivity by up to ±5 % relative to the value at a fixed pressure. In routine
+the sensitivity by up to about 5 % across the naturally occurring range of ambient
+pressure. In routine
 data this pressure signal is **masked by slow instrument drift**, so it must be
 *separated* from the drift before it can be corrected.
 
