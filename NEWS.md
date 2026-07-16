@@ -1,3 +1,11 @@
+# appac 4.0.4
+
+* Vignette: corrected the stated magnitude of the atmospheric-pressure effect on
+  FID sensitivity. Normal pressure swings change the sensitivity by up to about
+  5 % *across the naturally occurring range of ambient pressure* — an absolute
+  span — not "±5 %", which wrongly implied a ± band about a fixed-pressure value
+  (i.e. roughly twice the real effect). Documentation only; no code change.
+
 # appac 4.0.3
 
 * Added a package vignette (`vignette("appac")`) covering usage on `PLOT_FID` and

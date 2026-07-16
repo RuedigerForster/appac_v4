@@ -18,3 +18,5 @@
 ^\.DS_Store$
 ^\.positai$
 ^\.claude$
+^\.idea$
+^appac_.*\.tar\.gz$

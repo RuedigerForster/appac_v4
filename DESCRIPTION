@@ -1,6 +1,6 @@
 Package: appac
 Title: Atmospheric Pressure Peak Area Correction for Gas Chromatography with Standard Detectors
-Version: 4.0.3
+Version: 4.0.4
 Authors@R:
     person("Ruediger", "Forster", , "meticulous.measurements@gmail.com",
            role = c("aut", "cre"),
