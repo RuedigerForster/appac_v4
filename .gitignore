@@ -61,3 +61,6 @@ rsconnect/
 .positai
 # locally-knit demo HTML
 appac_demo.html
+
+# local planning scratch — kept on disk, tracked as GitHub issues instead
+TODO.md
